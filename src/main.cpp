@@ -3,6 +3,8 @@
 #include "Adafruit_GFX.h"
 #include "Adafruit_SSD1306.h"
 
+#include "./games/snake.h"
+
 #define ARDUINO_SPEED 115200
 #define DEFAULT_BT_SPEED 38400
 #define START_UPLOAD_SKETCH_COMMAND_1 48
@@ -15,8 +17,13 @@
 #define DISPLAY_WIDTH 128
 #define DISPLAY_HEIGHT 32
 
+#define DISPLAY_LINES 4
+#define DISPLAY_LINE_HEIGHT 8
+
 // Defines
 Adafruit_SSD1306 display(DISPLAY_WIDTH, DISPLAY_HEIGHT);
+
+Snake *snake;
 
 enum Command
 {
@@ -30,7 +37,42 @@ enum Command
 
 byte ResetDTR[2];
 
+int displayLineNumber = 0;
+
 // utils
+void displayPrintln(const char str[], int fontSize = 1, int x = 0, int y = 0)
+{
+  // display.clearDisplay();
+
+  display.setCursor(x, y);
+  display.setTextSize(fontSize);
+  display.setTextColor(SSD1306_WHITE);
+  display.println(str);
+
+  display.display();
+
+  delay(10);
+}
+
+void displayReset(const char str[] = NULL)
+{
+  displayLineNumber = 0;
+  display.clearDisplay();
+}
+
+void info(const char str[], int fontSize = 1)
+{
+
+  Serial.println(str);
+  displayPrintln(str, fontSize, 0, displayLineNumber * DISPLAY_LINE_HEIGHT);
+
+  displayLineNumber++;
+  if (displayLineNumber >= DISPLAY_LINES)
+  {
+    displayReset();
+  }
+}
+
 void ATcommandMode()
 {
   pinMode(PIN_AT_MODE, OUTPUT);
@@ -49,6 +91,12 @@ void ATcommandMode()
 
   digitalWrite(PIN_AT_MODE, LOW);
 }
+
+void preReboot()
+{
+  delete snake;
+}
+
 void reboot()
 {
   pinMode(PIN_REBOOT, OUTPUT);
@@ -93,27 +141,18 @@ void testscrolltext(void)
   delay(2000);
 }
 
-void initDisplay()
-{
-  display.clearDisplay();
-
-  display.setTextSize(2);
-  display.setTextColor(SSD1306_WHITE);
-  display.println(F("Arduino & Bluetooth"));
-
-  display.display();
-  delay(10);
-}
-
 // Commands
 void commandGreeting()
 {
-  Serial.println("Hi there!");
+  info("Hi there!");
 }
 
 void commandReboot()
 {
-  Serial.println("Rebooting...");
+  info("Rebooting...");
+
+  preReboot();
+
   Serial.end();
 
   delay(10);
@@ -127,11 +166,13 @@ void commandToggleLed()
 
   Serial.print("Led is ");
   Serial.println(analogRead(PIN_LED) ? "on" : "off");
+
+  info("Toggle led");
 }
 
 void commandBlinkLed(int count = 20, int delayMs = 200)
 {
-  Serial.println("Blink led");
+  info("Blink led");
 
   for (int i = 0; i < count; i++)
   {
@@ -142,26 +183,24 @@ void commandBlinkLed(int count = 20, int delayMs = 200)
 
 void commandHelp()
 {
-  Serial.print("Commands: \n\t");
-  Serial.print("h - Help \n\t");
-  Serial.print("1 - Greeting \n\t");
-  Serial.print("2 - Toggle led \n\t");
-  Serial.print("3 - Blink led \n\t");
-  Serial.print("4 - Test display \n\t");
-  Serial.println("9 - Reboot");
+  displayReset();
+
+  info("Commands:");
+  info("h - Help");
+  info("1 - Greeting");
+  info("2 - Toggle led");
+  info("3 - Blink led");
+  info("4 - Test display");
+  info("9 - Reboot");
 }
 
 void commandTestDisplay()
 {
-  Serial.println("Test Display");
+  info("Test Display");
 
   delay(10);
 
   testscrolltext();
-
-  delay(10);
-
-  initDisplay();
 }
 
 // Main logic
@@ -204,13 +243,17 @@ void setup()
   Serial.begin(ARDUINO_SPEED);
   pinMode(PIN_LED, OUTPUT);
 
-  ATcommandMode();
+  // ATcommandMode();
+
+  displayReset();
 
   commandBlinkLed(10, 100);
 
-  initDisplay();
+  displayReset();
 
-  Serial.println("Ready...");
+  info("Ready...");
+
+  snake = new Snake(&display);
 }
 
 void loop()
@@ -221,6 +264,9 @@ void loop()
 
     if (ResetDTR[1] == START_UPLOAD_SKETCH_COMMAND_1 && ResetDTR[0] == START_UPLOAD_SKETCH_COMMAND_2)
     {
+      displayReset();
+      info("Flashing...");
+
       return reboot();
     }
 
@@ -228,4 +274,6 @@ void loop()
 
     ResetDTR[1] = ResetDTR[0];
   }
+
+  snake->update();
 }
